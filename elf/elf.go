@@ -320,7 +320,11 @@ func getMapPath(mapDef *C.bpf_map_def, mapName, pinPath string) (string, error) 
 	var mapPath string
 	switch mapDef.pinning {
 	case PIN_OBJECT_NS:
-		return "", fmt.Errorf("not implemented yet")
+		namespace := getMapNamespace(mapDef)
+		if namespace == "" {
+			return "", fmt.Errorf("map %q has empty namespace", mapName)
+		}
+		mapPath = filepath.Join(BPFFSPath, namespace, mapName)
 	case PIN_GLOBAL_NS:
 		namespace := getMapNamespace(mapDef)
 		if namespace == "" {
