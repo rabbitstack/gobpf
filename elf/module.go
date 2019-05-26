@@ -37,9 +37,20 @@ import (
 #include <strings.h>
 #include <stdlib.h>
 #include "include/bpf.h"
+#include "include/libbpf.h"
 #include <linux/perf_event.h>
 #include <linux/unistd.h>
 #include <sys/socket.h>
+#include <inttypes.h>
+#include <stdio.h>
+#include <errno.h>
+#include <net/if.h>
+#include <string.h>
+#include <linux/if_link.h>
+#include <linux/rtnetlink.h>
+
+#include "lib/nlattr.c"
+#include "lib/netlink.c"
 
 static int perf_event_open_tracepoint(int tracepoint_id, int pid, int cpu,
                            int group_fd, unsigned long flags)
@@ -88,6 +99,26 @@ int bpf_detach_socket(int sock, int fd)
 {
 	return setsockopt(sock, SOL_SOCKET, SO_DETACH_BPF, &fd, sizeof(fd));
 }
+
+int bpf_attach_xdp(const char *dev_name, int progfd, uint32_t flags)
+{
+  int ifindex = if_nametoindex(dev_name);
+  char err_buf[256];
+  int ret = -1;
+
+  if (ifindex == 0) {
+    fprintf(stderr, "bpf: Resolving device name to index: %s\n", strerror(errno));
+    return -1;
+  }
+
+  ret = bpf_set_link_xdp_fd(ifindex, progfd, flags);
+  if (ret) {
+    fprintf(stderr, "bpf: Attaching prog to %s: %s", dev_name, err_buf);
+    return -1;
+  }
+
+  return 0;
+}
 */
 import "C"
 
@@ -104,6 +135,7 @@ type Module struct {
 	socketFilters      map[string]*SocketFilter
 	tracepointPrograms map[string]*TracepointProgram
 	schedPrograms      map[string]*SchedProgram
+	xdpPrograms        map[string]*XDPProgram
 
 	compatProbe bool // try to be automatically convert function names depending on kernel versions (SyS_ and __x64_sys_)
 }
@@ -161,6 +193,12 @@ type SchedProgram struct {
 	fd    int
 }
 
+type XDPProgram struct {
+	Name string
+	insns *C.struct_bpf_insn
+	fd    int
+}
+
 func newModule() *Module {
 	return &Module{
 		probes:             make(map[string]*Kprobe),
@@ -169,6 +207,7 @@ func newModule() *Module {
 		socketFilters:      make(map[string]*SocketFilter),
 		tracepointPrograms: make(map[string]*TracepointProgram),
 		schedPrograms:      make(map[string]*SchedProgram),
+		xdpPrograms: 		make(map[string]*XDPProgram),
 		log:                make([]byte, 524288),
 	}
 }
@@ -439,7 +478,7 @@ func AttachUprobe(uprobe *Uprobe, path string, offset uint64) error {
 		probeType, safeEventName(path), offset, os.Getpid())
 
 	if _, ok := uprobe.efds[eventName]; ok {
-		return fmt.Errorf("uprobe already attached")
+		return errors.New("uprobe already attached")
 	}
 
 	uprobeID, err := writeUprobeEvent(probeType, eventName, path, offset)
@@ -455,6 +494,42 @@ func AttachUprobe(uprobe *Uprobe, path string, offset uint64) error {
 	uprobe.efds[eventName] = efd
 
 	return nil
+}
+
+func (b *Module) AttachXDP(devName string, secName string) error {
+	xdp, ok := b.xdpPrograms[secName]
+	if !ok {
+		return fmt.Errorf("no such XDP %q", secName)
+	}
+	if err := attachXDP(devName, xdp.fd, 0, true); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (b *Module) RemoveXDP(devName string) error {
+	if err := attachXDP(devName, -1, 0, false); err != nil {
+		return err
+	}
+	return nil
+}
+
+func attachXDP(devName string, fd int, flags uint32, attach bool) error {
+	devNameCS := C.CString(devName)
+	res, err := C.bpf_attach_xdp(devNameCS, C.int(fd), C.uint32_t(flags))
+	defer C.free(unsafe.Pointer(devNameCS))
+
+	if res != 0 || err != nil {
+		return fmt.Errorf("failed to %s BPF xdp to device %v: %v", xdpAction(attach), devName, err)
+	}
+	return nil
+}
+
+func xdpAction(attach bool) string {
+	if attach {
+		return "attach"
+	}
+	return "remove"
 }
 
 func AttachCgroupProgram(cgroupProg *CgroupProgram, cgroupPath string, attachType AttachType) error {
