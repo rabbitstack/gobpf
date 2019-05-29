@@ -103,22 +103,22 @@ int bpf_detach_socket(int sock, int fd)
 
 int bpf_attach_xdp(const char *dev_name, int progfd, uint32_t flags)
 {
-  int ifindex = if_nametoindex(dev_name);
-  char err_buf[256];
-  int ret = -1;
+  	int ifindex = if_nametoindex(dev_name);
+  	char err_buf[256];
+  	int ret = -1;
 
-  if (ifindex == 0) {
-    fprintf(stderr, "bpf: Resolving device name to index: %s\n", strerror(errno));
-    return -1;
-  }
+  	if (ifindex == 0) {
+    	fprintf(stderr, "bpf: Resolving device name to index: %s\n", strerror(errno));
+    	return -1;
+  	}
 
-  ret = bpf_set_link_xdp_fd(ifindex, progfd, flags);
-  if (ret) {
-    fprintf(stderr, "bpf: Attaching prog to %s: %s", dev_name, err_buf);
-    return -1;
-  }
+  	ret = bpf_set_link_xdp_fd(ifindex, progfd, flags);
+  	if (ret) {
+    	fprintf(stderr, "bpf: Attaching prog to %s: %s", dev_name, err_buf);
+    	return -1;
+  	}
 
-  return 0;
+  	return 0;
 }
 */
 import "C"
@@ -446,6 +446,17 @@ func (b *Module) IterTracepointProgram() <-chan *TracepointProgram {
 	go func() {
 		for name := range b.tracepointPrograms {
 			ch <- b.tracepointPrograms[name]
+		}
+		close(ch)
+	}()
+	return ch
+}
+
+func (b *Module) IterXDPProgram() <-chan *XDPProgram {
+	ch := make(chan *XDPProgram)
+	go func() {
+		for name := range b.xdpPrograms {
+			ch <- b.xdpPrograms[name]
 		}
 		close(ch)
 	}()
