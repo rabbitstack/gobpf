@@ -194,8 +194,9 @@ type SchedProgram struct {
 	fd    int
 }
 
+// XDPProgram represents a XDP hook program
 type XDPProgram struct {
-	Name string
+	Name  string
 	insns *C.struct_bpf_insn
 	fd    int
 }
@@ -208,7 +209,7 @@ func newModule() *Module {
 		socketFilters:      make(map[string]*SocketFilter),
 		tracepointPrograms: make(map[string]*TracepointProgram),
 		schedPrograms:      make(map[string]*SchedProgram),
-		xdpPrograms: 		make(map[string]*XDPProgram),
+		xdpPrograms:        make(map[string]*XDPProgram),
 		log:                make([]byte, 524288),
 	}
 }
@@ -511,7 +512,7 @@ func AttachUprobe(uprobe *Uprobe, path string, offset uint64) error {
 func (b *Module) AttachXDP(devName string, secName string) error {
 	xdp, ok := b.xdpPrograms[secName]
 	if !ok {
-		return fmt.Errorf("no such XDP %q", secName)
+		return fmt.Errorf("no such XDP hook %q", secName)
 	}
 	if err := attachXDP(devName, xdp.fd, 0, true); err != nil {
 		return err
@@ -532,16 +533,16 @@ func attachXDP(devName string, fd int, flags uint32, attach bool) error {
 	defer C.free(unsafe.Pointer(devNameCS))
 
 	if res != 0 || err != nil {
-		return fmt.Errorf("failed to %s BPF xdp to device %v: %v", xdpAction(attach), devName, err)
+		return fmt.Errorf(xdpFormat(attach), devName, err)
 	}
 	return nil
 }
 
-func xdpAction(attach bool) string {
+func xdpFormat(attach bool) string {
 	if attach {
-		return "attach"
+		return "failed to attach BPF xdp to device %s: %v"
 	}
-	return "remove"
+	return "failed to remove BPF xdp from device %s: %v"
 }
 
 func AttachCgroupProgram(cgroupProg *CgroupProgram, cgroupPath string, attachType AttachType) error {
