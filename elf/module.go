@@ -771,6 +771,15 @@ func (b *Module) closeSocketFilters() error {
 	return nil
 }
 
+func (b *Module) closeXDPPrograms() error {
+	for _, xdp := range b.xdpPrograms {
+		if err := syscall.Close(xdp.fd); err != nil {
+			return fmt.Errorf("error closing XDP program fd: %v", err)
+		}
+	}
+	return nil
+}
+
 func unpinMap(m *Map, pinPath string) error {
 	mapPath, err := getMapPath(&m.m.def, m.Name, pinPath)
 	if err != nil {
@@ -828,6 +837,7 @@ type CloseOptions struct {
 // * Detaching BPF programs from kprobes and closing their file descriptors
 // * Closing cgroup-bpf file descriptors
 // * Closing socket filter file descriptors
+// * Closing XDP file descriptors
 //
 // It doesn't detach BPF programs from cgroups or sockets because they're
 // considered resources the user controls.
@@ -854,6 +864,9 @@ func (b *Module) CloseExt(options map[string]CloseOptions) error {
 		return err
 	}
 	if err := b.closeSocketFilters(); err != nil {
+		return err
+	}
+	if err := b.closeXDPPrograms(); err != nil {
 		return err
 	}
 	return nil
