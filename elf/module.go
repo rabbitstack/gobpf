@@ -691,6 +691,14 @@ func (sp *SchedProgram) Fd() int {
 	return sp.fd
 }
 
+func (b *Module) XDPProgram(name string) *XDPProgram {
+	return b.xdpPrograms[name]
+}
+
+func (xdpp *XDPProgram) Fd() int {
+	return xdpp.fd
+}
+
 func (b *Module) closeProbes() error {
 	var funcName string
 	for _, probe := range b.probes {
