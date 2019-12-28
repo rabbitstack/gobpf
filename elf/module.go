@@ -202,7 +202,12 @@ type XDPProgram struct {
 	fd    int
 }
 
-func newModule() *Module {
+func newModule(logSize uint32) *Module {
+    logBytes := logSize
+    if logSize == 0 {
+        logBytes = 524288
+    }
+
 	return &Module{
 		probes:             make(map[string]*Kprobe),
 		uprobes:            make(map[string]*Uprobe),
@@ -211,18 +216,19 @@ func newModule() *Module {
 		tracepointPrograms: make(map[string]*TracepointProgram),
 		schedPrograms:      make(map[string]*SchedProgram),
 		xdpPrograms:        make(map[string]*XDPProgram),
-		log:                make([]byte, 524288),
+		log:                make([]byte, logBytes),
 	}
 }
 
-func NewModule(fileName string) *Module {
-	module := newModule()
+func NewModule(fileName string, logSize uint32) *Module {
+
+	module := newModule(logSize)
 	module.fileName = fileName
 	return module
 }
 
-func NewModuleFromReader(fileReader io.ReaderAt) *Module {
-	module := newModule()
+func NewModuleFromReader(fileReader io.ReaderAt, logSize uint32) *Module {
+	module := newModule(logSize)
 	module.fileReader = fileReader
 	return module
 }
